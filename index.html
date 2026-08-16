@@ -27,10 +27,11 @@
       radial-gradient(ellipse 600px 500px at 50% 110%, rgba(var(--accent-rgb),.09), transparent 60%),
       var(--bg);
     color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased;
-    overscroll-behavior-y:none; padding-bottom:calc(74px + env(safe-area-inset-bottom)); min-height:100%;
+    overscroll-behavior-y:none; min-height:100%;
   }
   canvas#fx{position:fixed; inset:0; z-index:0; pointer-events:none;}
-  #app{position:relative; z-index:1; max-width:560px; margin:0 auto; min-height:100%; padding:0 16px;}
+  #app{position:relative; z-index:1; max-width:560px; margin:0 auto; min-height:100%; padding:0 16px calc(74px + env(safe-area-inset-bottom)); transition:padding-bottom .2s ease;}
+  body.rest-active #app{padding-bottom:calc(150px + env(safe-area-inset-bottom));}
 
   header.top{padding:calc(18px + env(safe-area-inset-top)) 0 16px; display:flex; align-items:center; justify-content:space-between;}
   header.top .brand{font-family:var(--mono); font-size:12.5px; letter-spacing:.22em; color:var(--accent); text-transform:uppercase;}
@@ -126,7 +127,8 @@
   svg.chart{width:100%; height:140px; display:block;}
 
   /* Home */
-  .greeting-sub{color:var(--muted); font-size:13.5px; margin:-2px 0 18px;}
+  .greeting-sub{color:var(--muted); font-size:13.5px; margin:-2px 0 12px;}
+  .quote-line{font-size:12.5px; color:var(--muted); font-style:italic; border-left:2px solid var(--accent-dim); padding:2px 0 2px 11px; margin:0 0 18px; line-height:1.5;}
   .resume-card{border:1px solid var(--accent-dim); background:linear-gradient(135deg, rgba(var(--accent-rgb),.14), var(--surface)); border-radius:var(--radius); padding:14px 16px; margin-bottom:16px; animation:resumePulse 2.4s ease-in-out infinite;}
   @keyframes resumePulse{0%,100%{box-shadow:0 0 0 rgba(var(--accent-rgb),0);} 50%{box-shadow:0 0 18px rgba(var(--accent-rgb),.18);}}
   .week-ring{display:flex; justify-content:space-between; margin-bottom:18px;}
@@ -137,7 +139,7 @@
   .quick-actions .btn{flex:1; padding:12px 8px; font-size:12.5px; flex-direction:column; gap:4px;}
   .quick-actions .btn svg{width:17px; height:17px;}
 
-  /* Sheets */
+  /* Sheets & modals */
   .sheet-bg{position:fixed; inset:0; background:rgba(8,7,12,.6); backdrop-filter:blur(2px); z-index:70; display:flex; align-items:flex-end; animation:fadeIn .18s ease;}
   @keyframes fadeIn{from{opacity:0;} to{opacity:1;}}
   .sheet{background:var(--surface); border:1px solid var(--line); border-top-left-radius:22px; border-top-right-radius:22px; width:100%; max-width:560px; margin:0 auto; max-height:82vh; overflow-y:auto; padding:20px 18px calc(26px + env(safe-area-inset-bottom)); animation:sheetUp .26s cubic-bezier(.2,.8,.3,1);}
@@ -154,10 +156,6 @@
   .stepper .val{font-family:var(--mono); font-size:20px; min-width:64px; text-align:center;}
   .settings-section{margin-bottom:22px;}
   .settings-section .label{font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:10px;}
-
-  .quick-log{display:flex; gap:8px; margin-bottom:14px;}
-  .quick-log input{flex:1;}
-  .quick-log button{flex-shrink:0;}
 
   #rest-timer{
     position:fixed; left:12px; right:12px; bottom:calc(84px + env(safe-area-inset-bottom));
@@ -232,6 +230,27 @@ function applyTheme(){
   s.setProperty('--accent-dim', p.dim);
   s.setProperty('--accent-rgb', ACCENT_RGB.join(','));
   s.setProperty('--accent-glow', `rgba(${ACCENT_RGB.join(',')},.35)`);
+}
+
+/* ---- Daily line ---- */
+const QUOTES = [
+  "Discipline is choosing what you want most over what you want now.",
+  "The body achieves what the mind believes.",
+  "Small consistent efforts outlast rare heroic ones.",
+  "You don't rise to your goals, you fall to your systems.",
+  "Rest is part of the work, not an escape from it.",
+  "Progress hides inside repetition.",
+  "The weight doesn't care about your excuses, and neither should you.",
+  "Comfort and growth rarely share a room.",
+  "Show up today. Tomorrow was never guaranteed.",
+  "Strength is a habit before it's a number on the bar.",
+  "You are one session closer, or one excuse further.",
+  "The hardest rep is the one you almost didn't start.",
+];
+function dailyQuote(){
+  const start = new Date(new Date().getFullYear(),0,0);
+  const dayOfYear = Math.floor((Date.now()-start.getTime())/86400000);
+  return QUOTES[dayOfYear % QUOTES.length];
 }
 
 /* ---- Progressive overload helpers ---- */
@@ -343,10 +362,14 @@ let TAB = 'home';
 let VIEW = { screen:'home' };
 const root = document.getElementById('app');
 let elapsedInterval = null;
+let lastScreenKey = null;
 const NAV_TABS = [['home','Home','home'],['plans','Plans','plans'],['train','Train','train'],['stats','Stats','stats']];
 
 function render(){
   const screenKey = VIEW.screen === 'settings' ? 'settings' : VIEW.screen;
+  const preserveScroll = (screenKey === lastScreenKey);
+  const scrollY = window.scrollY;
+
   let content = '';
   if(screenKey==='home') content = renderHome();
   else if(screenKey==='plans') content = renderPlans();
@@ -356,10 +379,27 @@ function render(){
   else if(screenKey==='stats') content = renderStats();
   else if(screenKey==='settings') content = renderSettings();
 
-  root.innerHTML = renderHeader() + `<div class="screen">${content}</div>` + renderNav() + renderSheet();
+  root.innerHTML = renderHeader() + `<div class="screen">${content}</div>` + renderNav() + renderSheet() + renderModal();
   attachHandlers();
   syncTimerBar();
   manageElapsedTimer();
+  focusOverlayInput();
+
+  if(preserveScroll) window.scrollTo(0, scrollY); else window.scrollTo(0,0);
+  lastScreenKey = screenKey;
+}
+
+function focusOverlayInput(){
+  const modalInput = document.getElementById('modal-input');
+  if(modalInput){
+    modalInput.focus();
+    modalInput.onkeydown = (e) => { if(e.key==='Enter'){ e.preventDefault(); document.querySelector('[data-action="modal-confirm"]')?.click(); } };
+  }
+  const sheetInput = document.getElementById('sheet-input');
+  if(sheetInput){
+    sheetInput.focus();
+    sheetInput.onkeydown = (e) => { if(e.key==='Enter'){ e.preventDefault(); document.querySelector('[data-action="save-sheet"]')?.click(); } };
+  }
 }
 
 function renderHeader(){
@@ -386,8 +426,29 @@ function renderSheet(){
     <div class="sheet" onclick="event.stopPropagation()">
       <div class="sheet-handle"></div>
       <h2 style="font-size:16px; margin-bottom:14px;">${isBody?'Log Body Weight':'Log Sleep'}</h2>
-      <input id="sheet-input" type="number" step="${isBody?'0.1':'0.25'}" inputmode="decimal" placeholder="${isBody?'Weight in kg':'Hours slept'}" autofocus>
+      <input id="sheet-input" type="number" step="${isBody?'0.1':'0.25'}" inputmode="decimal" placeholder="${isBody?'Weight in kg':'Hours slept'}">
       <button class="btn primary block" data-action="save-sheet" style="margin-top:12px;">Save</button>
+    </div>
+  </div>`;
+}
+function renderModal(){
+  const m = VIEW.modal;
+  if(!m) return '';
+  const hasInput = m.kind==='prompt' || m.kind==='exercise';
+  return `<div class="sheet-bg" data-action="close-modal">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <h2 style="font-size:16px; margin-bottom:${m.message?'4px':'14px'};">${esc(m.title)}</h2>
+      ${m.message?`<div class="sub" style="margin-bottom:14px;">${esc(m.message)}</div>`:''}
+      ${hasInput?`<input id="modal-input" type="${m.inputType||'text'}" placeholder="${esc(m.placeholder||'')}" value="${esc(m.value!=null?m.value:(m.defaultValue||''))}">`:''}
+      ${m.kind==='exercise'?`<div style="display:flex; gap:8px; margin-top:10px;">
+        <button class="btn sm block ${m.type!=='cardio'?'primary':''}" data-action="modal-set-type" data-value="strength">Lift</button>
+        <button class="btn sm block ${m.type==='cardio'?'primary':''}" data-action="modal-set-type" data-value="cardio">Cardio</button>
+      </div>`:''}
+      <div style="display:flex; gap:8px; margin-top:16px;">
+        ${m.hideCancel?'':'<button class="btn block" data-action="close-modal">Cancel</button>'}
+        <button class="btn ${m.danger?'danger':'primary'} block" data-action="modal-confirm">${esc(m.confirmLabel||'OK')}</button>
+      </div>
     </div>
   </div>`;
 }
@@ -462,6 +523,7 @@ function renderHome(){
   <div class="eyebrow">${greetingText()}</div>
   <h1>Training Log</h1>
   <div class="greeting-sub">${greetingSub()}</div>
+  <div class="quote-line">${esc(dailyQuote())}</div>
   ${resumeHtml}
   ${renderWeekRing()}
   <div class="stat-grid">
@@ -549,6 +611,9 @@ function renderSession(){
   const s = DB.activeSession;
   if(!s){ VIEW.screen='train-pick'; return renderTrainPick(); }
 
+  const totalSets = s.exercises.reduce((a,e)=>a+e.sets.length,0);
+  const loggedSets = s.exercises.reduce((a,e)=>a+e.sets.filter(st=>st.logged).length,0);
+
   const exBlocks = s.exercises.map((ex, exi) => {
     const hasPrev = ex.prevSets && ex.prevSets.length;
     const copyBtn = hasPrev ? `<button class="copy-last" data-action="copy-last" data-ex="${exi}">↺ Use last time</button>` : '';
@@ -596,11 +661,13 @@ function renderSession(){
     <h1 style="margin-bottom:0;">${esc(s.dayName)}</h1>
     <span class="elapsed" id="session-elapsed">0:00</span>
   </div>
-  <div class="sub">Rest default: <span data-action="edit-rest" style="color:var(--accent); text-decoration:underline;">${DB.settings.restSeconds}s</span></div>
+  <div class="sub">${loggedSets}/${totalSets} sets logged · rest <span data-action="edit-rest" style="color:var(--accent); text-decoration:underline;">${DB.settings.restSeconds}s</span></div>
   ${exBlocks}
-  <button class="btn ghost block" data-action="add-exercise-to-session" style="margin-bottom:10px;">+ Add exercise</button>
-  <button class="btn primary block" data-action="finish-session" style="margin-bottom:10px;">Finish & Save Session</button>
-  <button class="btn danger block" data-action="discard-session">Discard</button>
+  <div class="session-actions">
+    <button class="btn ghost block" data-action="add-exercise-to-session" style="margin-bottom:10px;">+ Add exercise</button>
+    <button class="btn primary block" data-action="finish-session" style="margin-bottom:10px;">Finish & Save Session</button>
+    <button class="btn danger block" data-action="discard-session">Discard</button>
+  </div>
   `;
 }
 
@@ -792,20 +859,30 @@ rtRing.style.strokeDasharray = RING_C;
 function startRestTimer(seconds){
   clearInterval(REST.timerId);
   REST.active = true; REST.remaining = seconds; REST.total = seconds;
-  updateTimerUI(); timerBar.classList.add('show');
+  updateTimerUI(); document.body.classList.add('rest-active'); syncTimerBar();
   REST.timerId = setInterval(()=>{ REST.remaining--; if(REST.remaining<=0){ finishRest(); return; } updateTimerUI(); }, 1000);
 }
-function finishRest(){ clearInterval(REST.timerId); REST.active=false; timerBar.classList.remove('show'); beep(); }
+function finishRest(){ clearInterval(REST.timerId); REST.active=false; timerBar.classList.remove('show'); document.body.classList.remove('rest-active'); beep(); }
 function updateTimerUI(){
   const m=Math.floor(Math.max(REST.remaining,0)/60), s=Math.max(REST.remaining,0)%60;
   rtTime.textContent = m+':'+String(s).padStart(2,'0');
   const frac = REST.total ? Math.max(REST.remaining,0)/REST.total : 0;
   rtRing.style.strokeDashoffset = RING_C*(1-frac);
 }
-function syncTimerBar(){ if(REST.active) timerBar.classList.add('show'); }
+function syncTimerBar(){ timerBar.classList.toggle('show', REST.active && !VIEW.modal && !VIEW.sheet); }
+document.getElementById('rt-plus').onclick = () => { REST.remaining += 15; REST.total += 15; updateTimerUI(); };
+document.getElementById('rt-skip').onclick = () => finishRest();
+
+/* ---- Shared audio context (avoid spawning a new one per beep) ---- */
+let audioCtx = null;
+function getAudioCtx(){
+  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
 function beep(){
   try{
-    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const ctx = getAudioCtx();
     const o=ctx.createOscillator(), g=ctx.createGain();
     o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination);
     g.gain.setValueAtTime(0.0001, ctx.currentTime);
@@ -816,7 +893,7 @@ function beep(){
 }
 function playPR(){
   try{
-    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    const ctx = getAudioCtx();
     [523.25,659.25,783.99].forEach((freq,i)=>{
       const o=ctx.createOscillator(), g=ctx.createGain();
       o.type='sine'; o.frequency.value=freq; o.connect(g); g.connect(ctx.destination);
@@ -870,11 +947,15 @@ function attachHandlers(){
       URL.revokeObjectURL(url);
     };
     if(a==='clear-data') el.onclick = () => {
-      if(!confirm('Erase all plans, sessions, and logs? This cannot be undone.')) return;
-      if(!confirm('Really sure? Consider exporting a backup first.')) return;
-      localStorage.removeItem(STORE_KEY);
-      DB = load(); DB.settings.accent = DB.settings.accent || 'violet';
-      applyTheme(); VIEW={screen:'home'}; TAB='home'; render();
+      VIEW.modal = { kind:'confirm', title:'Erase all data?', danger:true, confirmLabel:'Erase everything',
+        message:'All plans, sessions, and logs on this device will be permanently deleted. Export a backup first if you want to keep them.',
+        onConfirm:()=>{
+          localStorage.removeItem(STORE_KEY);
+          DB = load(); DB.settings.accent = DB.settings.accent || 'violet';
+          applyTheme(); VIEW={screen:'home'}; TAB='home';
+        }
+      };
+      render();
     };
 
     if(a==='open-sheet') el.onclick = () => { VIEW.sheet = el.dataset.kind; render(); };
@@ -893,9 +974,14 @@ function attachHandlers(){
     if(a==='resume-session') el.onclick = () => { TAB='train'; VIEW={screen:'train-session'}; render(); };
 
     if(a==='new-plan') el.onclick = () => {
-      const name = prompt('Plan name:', 'New Plan'); if(!name) return;
-      const p = { id:uid(), name, days:[] }; DB.plans.push(p); save();
-      VIEW = { screen:'plan-edit', planId:p.id }; render();
+      VIEW.modal = { kind:'prompt', title:'New Plan', placeholder:'Plan name', defaultValue:'New Plan', confirmLabel:'Create',
+        onConfirm:(val)=>{
+          const name = val.trim(); if(!name) return;
+          const p = { id:uid(), name, days:[] }; DB.plans.push(p); save();
+          VIEW = { screen:'plan-edit', planId:p.id };
+        }
+      };
+      render();
     };
     if(a==='open-plan') el.onclick = () => { VIEW = { screen:'plan-edit', planId:el.dataset.id }; render(); };
     if(a==='dup-plan') el.onclick = () => {
@@ -908,9 +994,10 @@ function attachHandlers(){
     if(a==='back-plans') el.onclick = () => { VIEW = { screen:'plans' }; render(); };
     if(a==='rename-plan') el.onblur = () => { const p=DB.plans.find(p=>p.id===VIEW.planId); p.name=el.value.trim()||p.name; save(); };
     if(a==='del-plan') el.onclick = () => {
-      if(!confirm('Delete this plan? This cannot be undone.')) return;
-      DB.plans = DB.plans.filter(p=>p.id!==VIEW.planId); save();
-      VIEW = { screen:'plans' }; render();
+      VIEW.modal = { kind:'confirm', title:'Delete plan?', message:'This cannot be undone.', danger:true, confirmLabel:'Delete',
+        onConfirm:()=>{ DB.plans = DB.plans.filter(p=>p.id!==VIEW.planId); save(); VIEW = { screen:'plans' }; }
+      };
+      render();
     };
     if(a==='add-day') el.onclick = () => {
       const p=DB.plans.find(p=>p.id===VIEW.planId); p.days.push({id:uid(),name:'New Day',exercises:[]}); save(); render();
@@ -941,8 +1028,10 @@ function attachHandlers(){
     };
 
     if(a==='edit-rest') el.onclick = () => {
-      const v = prompt('Default rest time (seconds):', DB.settings.restSeconds);
-      if(!v) return; DB.settings.restSeconds = parseInt(v)||90; save(); render();
+      VIEW.modal = { kind:'prompt', title:'Default Rest Time', message:'Seconds between sets.', inputType:'number', defaultValue:String(DB.settings.restSeconds), confirmLabel:'Save',
+        onConfirm:(val)=>{ const n=parseInt(val); if(n>0) DB.settings.restSeconds=n; save(); }
+      };
+      render();
     };
     if(a==='start-session') el.onclick = () => {
       const p=DB.plans.find(p=>p.id===el.dataset.plan); const d=p.days.find(d=>d.id===el.dataset.day);
@@ -997,12 +1086,16 @@ function attachHandlers(){
       save(); render();
     };
     if(a==='add-exercise-to-session') el.onclick = () => {
-      const name = prompt('Exercise name:'); if(!name) return;
-      const cardio = confirm('Is this a cardio exercise? OK = Cardio, Cancel = Strength');
-      DB.activeSession.exercises.push(cardio
-        ? {name, type:'cardio', targetReps:'', sets:[{distance:'',duration:'',logged:false}], prevSets:getPreviousSets(name,'cardio')}
-        : {name, type:'strength', targetSets:null, targetReps:'', sets:[{weight:'',reps:'',logged:false}], prevSets:getPreviousSets(name,'strength')});
-      save(); render();
+      VIEW.modal = { kind:'exercise', title:'Add Exercise', placeholder:'Exercise name', type:'strength', value:'', confirmLabel:'Add',
+        onConfirm:(name, type)=>{
+          if(!name) return;
+          DB.activeSession.exercises.push(type==='cardio'
+            ? {name, type:'cardio', targetReps:'', sets:[{distance:'',duration:'',logged:false}], prevSets:getPreviousSets(name,'cardio')}
+            : {name, type:'strength', targetSets:null, targetReps:'', sets:[{weight:'',reps:'',logged:false}], prevSets:getPreviousSets(name,'strength')});
+          save();
+        }
+      };
+      render();
     };
     if(a==='finish-session') el.onclick = () => {
       const s = DB.activeSession;
@@ -1018,12 +1111,34 @@ function attachHandlers(){
       VIEW={screen:'home'}; TAB='home'; render();
     };
     if(a==='discard-session') el.onclick = () => {
-      if(!confirm('Discard this session? Nothing will be saved.')) return;
-      DB.activeSession = null; save(); finishRest(); clearInterval(elapsedInterval);
-      VIEW={screen:'train-pick'}; render();
+      VIEW.modal = { kind:'confirm', title:'Discard session?', message:'Nothing will be saved.', danger:true, confirmLabel:'Discard',
+        onConfirm:()=>{
+          DB.activeSession = null; save(); finishRest(); clearInterval(elapsedInterval);
+          VIEW={screen:'train-pick'};
+        }
+      };
+      render();
     };
 
     if(a==='select-progress-ex') el.onchange = () => { VIEW.progressEx = el.value; render(); };
+
+    if(a==='close-modal') el.onclick = () => { VIEW.modal = null; render(); };
+    if(a==='modal-set-type') el.onclick = () => {
+      const inp = document.getElementById('modal-input');
+      if(inp) VIEW.modal.value = inp.value;
+      VIEW.modal.type = el.dataset.value;
+      render();
+    };
+    if(a==='modal-confirm') el.onclick = () => {
+      const m = VIEW.modal; if(!m) return;
+      const inp = document.getElementById('modal-input');
+      const val = inp ? inp.value : '';
+      VIEW.modal = null;
+      if(m.kind==='exercise') m.onConfirm(val.trim(), m.type||'strength');
+      else if(m.kind==='prompt') m.onConfirm(val);
+      else m.onConfirm();
+      render();
+    };
   });
 
   const importInput = document.getElementById('import-file');
@@ -1035,12 +1150,18 @@ function attachHandlers(){
         try{
           const imported = JSON.parse(reader.result);
           if(!imported.plans || !imported.sessions) throw new Error('bad format');
-          if(!confirm('Replace current data with this backup? This cannot be undone.')) return;
-          DB = imported;
-          if(!DB.bodyweight) DB.bodyweight=[]; if(!DB.sleep) DB.sleep=[];
-          if(!DB.settings) DB.settings={restSeconds:90, accent:'violet'};
-          save(); applyTheme(); render();
-        }catch(e){ alert('Could not read that file — make sure it is a Ledger backup.'); }
+          VIEW.modal = { kind:'confirm', title:'Replace current data?', message:'This backup will overwrite everything currently stored on this device.', danger:true, confirmLabel:'Restore',
+            onConfirm:()=>{
+              DB = imported;
+              if(!DB.bodyweight) DB.bodyweight=[]; if(!DB.sleep) DB.sleep=[];
+              if(!DB.settings) DB.settings={restSeconds:90, accent:'violet'};
+              save(); applyTheme();
+            }
+          };
+        }catch(e){
+          VIEW.modal = { kind:'confirm', title:'Import failed', message:"That file doesn't look like a Ledger backup.", confirmLabel:'OK', hideCancel:true, onConfirm:()=>{} };
+        }
+        render();
       };
       reader.readAsText(file);
     };
