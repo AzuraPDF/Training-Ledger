@@ -27,11 +27,10 @@
       radial-gradient(ellipse 600px 500px at 50% 110%, rgba(var(--accent-rgb),.09), transparent 60%),
       var(--bg);
     color:var(--text); font-family:var(--sans); -webkit-font-smoothing:antialiased;
-    overscroll-behavior-y:none; min-height:100%;
+    overscroll-behavior-y:none; padding-bottom:calc(74px + env(safe-area-inset-bottom)); min-height:100%;
   }
   canvas#fx{position:fixed; inset:0; z-index:0; pointer-events:none;}
-  #app{position:relative; z-index:1; max-width:560px; margin:0 auto; min-height:100%; padding:0 16px calc(74px + env(safe-area-inset-bottom)); transition:padding-bottom .2s ease;}
-  body.rest-active #app{padding-bottom:calc(150px + env(safe-area-inset-bottom));}
+  #app{position:relative; z-index:1; max-width:560px; margin:0 auto; min-height:100%; padding:0 16px;}
 
   header.top{padding:calc(18px + env(safe-area-inset-top)) 0 16px; display:flex; align-items:center; justify-content:space-between;}
   header.top .brand{font-family:var(--mono); font-size:12.5px; letter-spacing:.22em; color:var(--accent); text-transform:uppercase;}
@@ -122,13 +121,16 @@
 
   .ex-select{margin-bottom:14px;}
   .pr-badge{font-family:var(--mono); font-size:10px; color:var(--accent); border:1px solid var(--accent-dim); padding:3px 7px; border-radius:20px; white-space:nowrap;}
+  .lib-grid{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px;}
+  .lib-chip{font-family:var(--sans); font-size:12.5px; padding:8px 12px; border-radius:16px; border:1px solid var(--line); background:var(--surface-2); color:var(--text); transition:transform .1s ease;}
+  .lib-chip:active{transform:scale(.94);}
+  .lib-chip.added{color:var(--accent); border-color:var(--accent-dim); opacity:.75;}
   .hist-row{display:flex; justify-content:space-between; padding:9px 0; font-size:13.5px;}
   .hist-row .d{color:var(--muted); font-family:var(--mono); font-size:11.5px;}
   svg.chart{width:100%; height:140px; display:block;}
 
   /* Home */
-  .greeting-sub{color:var(--muted); font-size:13.5px; margin:-2px 0 12px;}
-  .quote-line{font-size:12.5px; color:var(--muted); font-style:italic; border-left:2px solid var(--accent-dim); padding:2px 0 2px 11px; margin:0 0 18px; line-height:1.5;}
+  .greeting-sub{color:var(--muted); font-size:13.5px; margin:-2px 0 18px;}
   .resume-card{border:1px solid var(--accent-dim); background:linear-gradient(135deg, rgba(var(--accent-rgb),.14), var(--surface)); border-radius:var(--radius); padding:14px 16px; margin-bottom:16px; animation:resumePulse 2.4s ease-in-out infinite;}
   @keyframes resumePulse{0%,100%{box-shadow:0 0 0 rgba(var(--accent-rgb),0);} 50%{box-shadow:0 0 18px rgba(var(--accent-rgb),.18);}}
   .week-ring{display:flex; justify-content:space-between; margin-bottom:18px;}
@@ -139,7 +141,7 @@
   .quick-actions .btn{flex:1; padding:12px 8px; font-size:12.5px; flex-direction:column; gap:4px;}
   .quick-actions .btn svg{width:17px; height:17px;}
 
-  /* Sheets & modals */
+  /* Sheets */
   .sheet-bg{position:fixed; inset:0; background:rgba(8,7,12,.6); backdrop-filter:blur(2px); z-index:70; display:flex; align-items:flex-end; animation:fadeIn .18s ease;}
   @keyframes fadeIn{from{opacity:0;} to{opacity:1;}}
   .sheet{background:var(--surface); border:1px solid var(--line); border-top-left-radius:22px; border-top-right-radius:22px; width:100%; max-width:560px; margin:0 auto; max-height:82vh; overflow-y:auto; padding:20px 18px calc(26px + env(safe-area-inset-bottom)); animation:sheetUp .26s cubic-bezier(.2,.8,.3,1);}
@@ -156,6 +158,10 @@
   .stepper .val{font-family:var(--mono); font-size:20px; min-width:64px; text-align:center;}
   .settings-section{margin-bottom:22px;}
   .settings-section .label{font-family:var(--mono); font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); margin-bottom:10px;}
+
+  .quick-log{display:flex; gap:8px; margin-bottom:14px;}
+  .quick-log input{flex:1;}
+  .quick-log button{flex-shrink:0;}
 
   #rest-timer{
     position:fixed; left:12px; right:12px; bottom:calc(84px + env(safe-area-inset-bottom));
@@ -189,12 +195,139 @@ function load(){
   return { plans: [], sessions: [], activeSession: null, bodyweight: [], sleep: [], settings:{ restSeconds:90, accent:'violet' } };
 }
 function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }
+function migrateCardioFields(){
+  let changed = false;
+  DB.plans.forEach(p => p.days.forEach(d => d.exercises.forEach(ex => {
+    if(ex.type === 'cardio' && ex.targetDistance === undefined){
+      const m = (ex.reps||'').match(/(\d+(\.\d+)?)/);
+      ex.targetDistance = m ? m[1] : '';
+      ex.targetTime = '';
+      changed = true;
+    }
+  })));
+  if(changed) save();
+}
+
+/* ================= Exercise Library ================= */
+const EXLIB = {
+  'Push': [
+    {name:'Bench Press', sets:4, reps:'6-8'},
+    {name:'Incline DB Press', sets:3, reps:'8-10'},
+    {name:'Fly', sets:3, reps:'10-12'},
+    {name:'Shoulder Press', sets:3, reps:'8-10'},
+    {name:'Shoulder Superset', sets:3, reps:'12-15'},
+    {name:'Tricep Extension', sets:3, reps:'10-12'},
+    {name:'Tricep Overhead', sets:3, reps:'10-12'},
+  ],
+  'Pull': [
+    {name:'Pulldown', sets:4, reps:'8-10'},
+    {name:'Dead Hang', sets:3, reps:'Max hold'},
+    {name:'One Arm Pull', sets:3, reps:'8-10'},
+    {name:'Bent Over Row', sets:4, reps:'6-8'},
+    {name:'Trap / Rear Delt', sets:3, reps:'12-15'},
+    {name:'Bicep Superset', sets:3, reps:'10-12'},
+    {name:'Preacher Curl', sets:3, reps:'10-12'},
+    {name:'Forearm', sets:3, reps:'15-20'},
+  ],
+  'Legs': [
+    {name:'Squat', sets:4, reps:'6-8'},
+    {name:'RDL', sets:3, reps:'8-10'},
+    {name:'Leg Extension', sets:3, reps:'12-15'},
+    {name:'Leg Curl', sets:3, reps:'12-15'},
+    {name:'Calves', sets:4, reps:'12-15'},
+    {name:'Hyperextension', sets:3, reps:'12-15'},
+    {name:'Ab Superset', sets:3, reps:'15-20'},
+  ],
+  'Calisthenics Upper': [
+    {name:'Explosive Pull Up', sets:4, reps:'5'},
+    {name:'Negative Muscle Up', sets:3, reps:'3-5'},
+    {name:'Band Assist Muscle Up', sets:3, reps:'3-5'},
+    {name:'Kettlebell Push Up', sets:3, reps:'8-10'},
+    {name:'Archer Push Up', sets:3, reps:'6-8'},
+    {name:'Pike Push Up', sets:3, reps:'8-10'},
+    {name:'Dips', sets:4, reps:'8-12'},
+    {name:'Leg Raise / L-Sit', sets:3, reps:'Max'},
+    {name:'Dead Hang', sets:3, reps:'Max hold'},
+  ],
+  'Calisthenics Lower': [
+    {name:'Deadlift', sets:4, reps:'5'},
+    {name:'Leg Press', sets:3, reps:'10-12'},
+    {name:'Leg Curl', sets:3, reps:'12-15'},
+    {name:'Leg Extension', sets:3, reps:'12-15'},
+    {name:'Calves', sets:4, reps:'12-15'},
+    {name:'Ab Superset', sets:3, reps:'15-20'},
+  ],
+  'Powerlifting': [
+    {name:'Back Squat', sets:5, reps:'5'},
+    {name:'Front Squat', sets:3, reps:'6-8'},
+    {name:'Bench Press', sets:5, reps:'5'},
+    {name:'Close Grip Bench', sets:3, reps:'6-8'},
+    {name:'Deadlift', sets:3, reps:'5'},
+    {name:'Barbell Row', sets:3, reps:'6-8'},
+    {name:'Overhead Press', sets:3, reps:'6-8'},
+  ],
+  'Cardio': [
+    {name:'Easy Run', type:'cardio', targetDistance:'5', targetTime:'30:00'},
+    {name:'Tempo Run', type:'cardio', targetDistance:'5', targetTime:'25:00'},
+    {name:'Long Run', type:'cardio', targetDistance:'10', targetTime:'60:00'},
+    {name:'Sprint Intervals', type:'cardio', targetDistance:'0.4', targetTime:'2:00'},
+  ],
+};
+function mkStrength(name, sets, reps){ return {id:uid(), name, type:'strength', sets, reps}; }
+function mkCardio(name, targetDistance, targetTime){ return {id:uid(), name, type:'cardio', targetDistance, targetTime}; }
+function fromLib(cat){
+  return EXLIB[cat].map(it => it.type==='cardio'
+    ? mkCardio(it.name, it.targetDistance, it.targetTime)
+    : mkStrength(it.name, it.sets, it.reps));
+}
+function buildTemplatePlan(key){
+  const day = (name, exercises) => ({ id:uid(), name, exercises });
+  if(key === 'ppl'){
+    return { id:uid(), name:'Push Pull Legs', days:[
+      day('Push', fromLib('Push')), day('Pull', fromLib('Pull')), day('Legs', fromLib('Legs')),
+    ]};
+  }
+  if(key === 'brosplit'){
+    return { id:uid(), name:'Bro Split', days:[
+      day('Push', fromLib('Push').filter(e=>!/Tricep/.test(e.name))),
+      day('Pull', fromLib('Pull').filter(e=>!/Bicep|Preacher|Forearm/.test(e.name))),
+      day('Legs', fromLib('Legs')),
+      day('Arms', [
+        mkStrength('Tricep Extension',3,'10-12'), mkStrength('Tricep Overhead',3,'10-12'),
+        mkStrength('Bicep Superset',3,'10-12'), mkStrength('Preacher Curl',3,'10-12'), mkStrength('Forearm',3,'15-20'),
+      ]),
+    ]};
+  }
+  if(key === 'calisthenics'){
+    return { id:uid(), name:'Calisthenics', days:[
+      day('Upper', fromLib('Calisthenics Upper')), day('Lower', fromLib('Calisthenics Lower')),
+    ]};
+  }
+  if(key === 'powerlifting'){
+    return { id:uid(), name:'Powerlifting', days:[
+      day('Squat Day', [mkStrength('Back Squat',5,'5'), mkStrength('Front Squat',3,'6-8'), mkStrength('Leg Press',3,'10-12'), mkStrength('Ab Superset',3,'15-20')]),
+      day('Bench Day', [mkStrength('Bench Press',5,'5'), mkStrength('Close Grip Bench',3,'6-8'), mkStrength('Overhead Press',3,'6-8'), mkStrength('Tricep Extension',3,'10-12')]),
+      day('Deadlift Day', [mkStrength('Deadlift',3,'5'), mkStrength('Barbell Row',3,'6-8'), mkStrength('Pull Up',3,'8-10'), mkStrength('Hyperextension',3,'12-15')]),
+    ]};
+  }
+  if(key === 'run'){
+    return { id:uid(), name:'Run', days:[
+      day('Easy Run', [mkCardio('Easy Run','5','30:00')]),
+      day('Tempo Run', [mkCardio('Tempo Run','5','25:00')]),
+      day('Long Run', [mkCardio('Long Run','10','60:00')]),
+    ]};
+  }
+  return { id:uid(), name:'New Plan', days:[] };
+}
+
 let DB = load();
 if(!DB.bodyweight) DB.bodyweight = [];
 if(!DB.sleep) DB.sleep = [];
+if(!DB.steps) DB.steps = [];
 if(!DB.settings) DB.settings = {};
 if(!DB.settings.restSeconds) DB.settings.restSeconds = 90;
 if(!DB.settings.accent) DB.settings.accent = 'violet';
+migrateCardioFields();
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
 function todayISO(){ return new Date().toISOString().slice(0,10); }
@@ -230,27 +363,6 @@ function applyTheme(){
   s.setProperty('--accent-dim', p.dim);
   s.setProperty('--accent-rgb', ACCENT_RGB.join(','));
   s.setProperty('--accent-glow', `rgba(${ACCENT_RGB.join(',')},.35)`);
-}
-
-/* ---- Daily line ---- */
-const QUOTES = [
-  "Discipline is choosing what you want most over what you want now.",
-  "The body achieves what the mind believes.",
-  "Small consistent efforts outlast rare heroic ones.",
-  "You don't rise to your goals, you fall to your systems.",
-  "Rest is part of the work, not an escape from it.",
-  "Progress hides inside repetition.",
-  "The weight doesn't care about your excuses, and neither should you.",
-  "Comfort and growth rarely share a room.",
-  "Show up today. Tomorrow was never guaranteed.",
-  "Strength is a habit before it's a number on the bar.",
-  "You are one session closer, or one excuse further.",
-  "The hardest rep is the one you almost didn't start.",
-];
-function dailyQuote(){
-  const start = new Date(new Date().getFullYear(),0,0);
-  const dayOfYear = Math.floor((Date.now()-start.getTime())/86400000);
-  return QUOTES[dayOfYear % QUOTES.length];
 }
 
 /* ---- Progressive overload helpers ---- */
@@ -354,6 +466,7 @@ const ICONS = {
   scale: '<circle cx="12" cy="12" r="9"/><path d="M12 8v4l2.5 2.5"/>',
   moon: '<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4 6.8 6.8 0 0 0 20 14.5Z"/>',
   bolt: '<path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/>',
+  activity: '<path d="M3 12h4l2-7 4 14 2-7h6"/>',
 };
 function icon(name, cls){ return `<svg class="${cls||''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]}</svg>`; }
 
@@ -361,15 +474,62 @@ function icon(name, cls){ return `<svg class="${cls||''}" viewBox="0 0 24 24" fi
 let TAB = 'home';
 let VIEW = { screen:'home' };
 const root = document.getElementById('app');
+let PENDING_SESSION = null;
+let PENDING_DIFF = null;
+function detectPlanDiff(session){
+  if(!session.planId || !session.dayId) return null;
+  const plan = DB.plans.find(p=>p.id===session.planId);
+  if(!plan) return null;
+  const day = plan.days.find(d=>d.id===session.dayId);
+  if(!day) return null;
+  const newExercises = [];
+  const setIncreases = [];
+  session.exercises.forEach(ex => {
+    if(!ex.sets.length) return;
+    const planEx = day.exercises.find(pe => pe.name === ex.name && (pe.type||'strength') === (ex.type||'strength'));
+    if(!planEx){
+      if(ex.type === 'cardio'){
+        newExercises.push({ name: ex.name, type:'cardio', targetDistance: ex.targetDistance||'', targetTime: ex.targetTime||'' });
+      } else {
+        newExercises.push({ name: ex.name, type:'strength', sets: ex.sets.length, reps: ex.targetReps || '' });
+      }
+    } else if(ex.type !== 'cardio' && ex.sets.length > (planEx.sets||1)){
+      setIncreases.push({ name: ex.name, from: planEx.sets||1, to: ex.sets.length });
+    }
+  });
+  if(newExercises.length===0 && setIncreases.length===0) return null;
+  return { plan, day, newExercises, setIncreases };
+}
+function applyDiffToPlan(diff){
+  const { day, newExercises, setIncreases } = diff;
+  newExercises.forEach(ne => {
+    if(ne.type === 'cardio'){
+      day.exercises.push({ id: uid(), name: ne.name, type:'cardio', targetDistance: ne.targetDistance, targetTime: ne.targetTime });
+    } else {
+      day.exercises.push({ id: uid(), name: ne.name, type:'strength', sets: ne.sets, reps: ne.reps });
+    }
+  });
+  setIncreases.forEach(si => {
+    const planEx = day.exercises.find(pe => pe.name === si.name);
+    if(planEx) planEx.sets = si.to;
+  });
+  save();
+}
+function finalizeSession(sessionObj){
+  DB.sessions.push(sessionObj);
+  DB.activeSession = null;
+  save();
+  finishRest();
+  clearInterval(elapsedInterval);
+  VIEW = { screen:'home' };
+  TAB = 'home';
+  render();
+}
 let elapsedInterval = null;
-let lastScreenKey = null;
 const NAV_TABS = [['home','Home','home'],['plans','Plans','plans'],['train','Train','train'],['stats','Stats','stats']];
 
 function render(){
   const screenKey = VIEW.screen === 'settings' ? 'settings' : VIEW.screen;
-  const preserveScroll = (screenKey === lastScreenKey);
-  const scrollY = window.scrollY;
-
   let content = '';
   if(screenKey==='home') content = renderHome();
   else if(screenKey==='plans') content = renderPlans();
@@ -379,27 +539,10 @@ function render(){
   else if(screenKey==='stats') content = renderStats();
   else if(screenKey==='settings') content = renderSettings();
 
-  root.innerHTML = renderHeader() + `<div class="screen">${content}</div>` + renderNav() + renderSheet() + renderModal();
+  root.innerHTML = renderHeader() + `<div class="screen">${content}</div>` + renderNav() + renderSheet();
   attachHandlers();
   syncTimerBar();
   manageElapsedTimer();
-  focusOverlayInput();
-
-  if(preserveScroll) window.scrollTo(0, scrollY); else window.scrollTo(0,0);
-  lastScreenKey = screenKey;
-}
-
-function focusOverlayInput(){
-  const modalInput = document.getElementById('modal-input');
-  if(modalInput){
-    modalInput.focus();
-    modalInput.onkeydown = (e) => { if(e.key==='Enter'){ e.preventDefault(); document.querySelector('[data-action="modal-confirm"]')?.click(); } };
-  }
-  const sheetInput = document.getElementById('sheet-input');
-  if(sheetInput){
-    sheetInput.focus();
-    sheetInput.onkeydown = (e) => { if(e.key==='Enter'){ e.preventDefault(); document.querySelector('[data-action="save-sheet"]')?.click(); } };
-  }
 }
 
 function renderHeader(){
@@ -421,34 +564,81 @@ function renderNav(){
 }
 function renderSheet(){
   if(!VIEW.sheet) return '';
-  const isBody = VIEW.sheet==='body';
+  if(VIEW.sheet === 'finish-diff') return renderFinishDiffSheet();
+  if(VIEW.sheet === 'library') return renderLibrarySheet();
+  if(VIEW.sheet === 'new-plan-template') return renderTemplateSheet();
+  if(['body','sleep','steps'].includes(VIEW.sheet)){
+    const kind = VIEW.sheet;
+    const titles = {body:'Log Body Weight', sleep:'Log Sleep', steps:'Log Steps'};
+    const placeholders = {body:'Weight in kg', sleep:'Hours slept', steps:'Steps today'};
+    const stepAttr = kind==='body' ? '0.1' : (kind==='sleep' ? '0.25' : '1');
+    return `<div class="sheet-bg" data-action="close-sheet">
+      <div class="sheet" onclick="event.stopPropagation()">
+        <div class="sheet-handle"></div>
+        <h2 style="font-size:16px; margin-bottom:14px;">${titles[kind]}</h2>
+        <input id="sheet-input" type="number" step="${stepAttr}" inputmode="decimal" placeholder="${placeholders[kind]}" autofocus>
+        <button class="btn primary block" data-action="save-sheet" style="margin-top:12px;">Save</button>
+      </div>
+    </div>`;
+  }
+  return '';
+}
+function renderLibrarySheet(){
+  const p = DB.plans.find(p=>p.id===VIEW.planId);
+  const d = p && p.days.find(d=>d.id===VIEW.libraryDayId);
+  if(!d) return '';
+  const existingNames = new Set(d.exercises.map(e=>e.name));
+  const sections = Object.entries(EXLIB).map(([cat, items]) => `
+    <div class="section-label" style="margin-top:16px;">${esc(cat)}</div>
+    <div class="lib-grid">
+      ${items.map(it => {
+        const added = existingNames.has(it.name);
+        return `<button class="lib-chip ${added?'added':''}" ${added?'disabled':''} data-action="add-from-library" data-cat="${esc(cat)}" data-name="${esc(it.name)}">${added?'✓ ':''}${esc(it.name)}</button>`;
+      }).join('')}
+    </div>`).join('');
   return `<div class="sheet-bg" data-action="close-sheet">
     <div class="sheet" onclick="event.stopPropagation()">
       <div class="sheet-handle"></div>
-      <h2 style="font-size:16px; margin-bottom:14px;">${isBody?'Log Body Weight':'Log Sleep'}</h2>
-      <input id="sheet-input" type="number" step="${isBody?'0.1':'0.25'}" inputmode="decimal" placeholder="${isBody?'Weight in kg':'Hours slept'}">
-      <button class="btn primary block" data-action="save-sheet" style="margin-top:12px;">Save</button>
+      <h2 style="font-size:16px; margin-bottom:2px;">Add from Library</h2>
+      <div class="sub" style="margin-bottom:0;">Tap to add — sets, reps, and cardio targets are prefilled, editable after.</div>
+      ${sections}
+      <button class="btn primary block" data-action="close-sheet" style="margin-top:16px;">Done</button>
     </div>
   </div>`;
 }
-function renderModal(){
-  const m = VIEW.modal;
-  if(!m) return '';
-  const hasInput = m.kind==='prompt' || m.kind==='exercise';
-  return `<div class="sheet-bg" data-action="close-modal">
+function renderTemplateSheet(){
+  const templates = [
+    ['ppl','Push / Pull / Legs'],
+    ['brosplit','Bro Split (PPL + Arms)'],
+    ['calisthenics','Calisthenics (Upper/Lower)'],
+    ['powerlifting','Powerlifting (Squat/Bench/Deadlift)'],
+    ['run','Run'],
+    ['blank','Blank Plan'],
+  ];
+  return `<div class="sheet-bg" data-action="close-sheet">
     <div class="sheet" onclick="event.stopPropagation()">
       <div class="sheet-handle"></div>
-      <h2 style="font-size:16px; margin-bottom:${m.message?'4px':'14px'};">${esc(m.title)}</h2>
-      ${m.message?`<div class="sub" style="margin-bottom:14px;">${esc(m.message)}</div>`:''}
-      ${hasInput?`<input id="modal-input" type="${m.inputType||'text'}" placeholder="${esc(m.placeholder||'')}" value="${esc(m.value!=null?m.value:(m.defaultValue||''))}">`:''}
-      ${m.kind==='exercise'?`<div style="display:flex; gap:8px; margin-top:10px;">
-        <button class="btn sm block ${m.type!=='cardio'?'primary':''}" data-action="modal-set-type" data-value="strength">Lift</button>
-        <button class="btn sm block ${m.type==='cardio'?'primary':''}" data-action="modal-set-type" data-value="cardio">Cardio</button>
-      </div>`:''}
-      <div style="display:flex; gap:8px; margin-top:16px;">
-        ${m.hideCancel?'':'<button class="btn block" data-action="close-modal">Cancel</button>'}
-        <button class="btn ${m.danger?'danger':'primary'} block" data-action="modal-confirm">${esc(m.confirmLabel||'OK')}</button>
-      </div>
+      <h2 style="font-size:16px; margin-bottom:4px;">New Plan</h2>
+      <div class="sub" style="margin-bottom:8px;">Start from a template or build blank.</div>
+      ${templates.map(([key,label])=>`<button class="btn block" data-action="create-from-template" data-key="${key}" style="margin-bottom:8px;">${label}</button>`).join('')}
+    </div>
+  </div>`;
+}
+function renderFinishDiffSheet(){
+  if(!PENDING_DIFF) return '';
+  const { newExercises, setIncreases } = PENDING_DIFF;
+  const items = [
+    ...newExercises.map(e=>`<div class="hist-row"><span>+ New exercise</span><span>${esc(e.name)}</span></div>`),
+    ...setIncreases.map(s=>`<div class="hist-row"><span>+ Extra set${s.to-s.from>1?'s':''}</span><span>${esc(s.name)} (${s.from}→${s.to})</span></div>`)
+  ].join('');
+  return `<div class="sheet-bg" data-action="close-sheet">
+    <div class="sheet" onclick="event.stopPropagation()">
+      <div class="sheet-handle"></div>
+      <h2 style="font-size:16px; margin-bottom:4px;">Update the template?</h2>
+      <div class="sub" style="margin-bottom:2px;">You added things this session that aren't in the plan yet.</div>
+      ${items}
+      <button class="btn primary block" data-action="finish-update-template" style="margin-top:14px;">Update Template &amp; Finish</button>
+      <button class="btn block" data-action="finish-once" style="margin-top:8px;">Just This Once</button>
     </div>
   </div>`;
 }
@@ -523,7 +713,6 @@ function renderHome(){
   <div class="eyebrow">${greetingText()}</div>
   <h1>Training Log</h1>
   <div class="greeting-sub">${greetingSub()}</div>
-  <div class="quote-line">${esc(dailyQuote())}</div>
   ${resumeHtml}
   ${renderWeekRing()}
   <div class="stat-grid">
@@ -534,6 +723,7 @@ function renderHome(){
     <button class="btn primary" data-action="go-train">${icon('bolt')}Train</button>
     <button class="btn" data-action="open-sheet" data-kind="body">${icon('scale')}Weight</button>
     <button class="btn" data-action="open-sheet" data-kind="sleep">${icon('moon')}Sleep</button>
+    <button class="btn" data-action="open-sheet" data-kind="steps">${icon('activity')}Steps</button>
   </div>
   <h2 style="margin-top:22px;">Recent</h2>
   ${recentHtml}
@@ -572,15 +762,25 @@ function renderPlanEdit(){
         <input value="${esc(d.name)}" data-action="rename-day" data-day="${d.id}" style="background:none; border:none; padding:0; font-weight:600; font-size:14px;">
         <button class="btn ghost" data-action="del-day" data-day="${d.id}">✕</button>
       </div>
-      ${d.exercises.map(ex => `
+      ${d.exercises.map(ex => ex.type==='cardio' ? `
+        <div class="ex-line">
+          <input value="${esc(ex.name)}" placeholder="Exercise" data-action="ex-field" data-field="name" data-day="${d.id}" data-ex="${ex.id}">
+          <input value="${esc(ex.targetDistance||'')}" placeholder="km" inputmode="decimal" data-action="ex-field" data-field="targetDistance" data-day="${d.id}" data-ex="${ex.id}">
+          <input value="${esc(ex.targetTime||'')}" placeholder="mm:ss" data-action="ex-field" data-field="targetTime" data-day="${d.id}" data-ex="${ex.id}">
+          <div class="type-chip cardio" data-action="toggle-type" data-day="${d.id}" data-ex="${ex.id}">Cardio</div>
+          <div class="rm" data-action="del-ex" data-day="${d.id}" data-ex="${ex.id}">✕</div>
+        </div>` : `
         <div class="ex-line">
           <input value="${esc(ex.name)}" placeholder="Exercise" data-action="ex-field" data-field="name" data-day="${d.id}" data-ex="${ex.id}">
           <input value="${ex.sets}" placeholder="Sets" inputmode="numeric" data-action="ex-field" data-field="sets" data-day="${d.id}" data-ex="${ex.id}">
           <input value="${esc(ex.reps)}" placeholder="Target" data-action="ex-field" data-field="reps" data-day="${d.id}" data-ex="${ex.id}">
-          <div class="type-chip ${ex.type==='cardio'?'cardio':''}" data-action="toggle-type" data-day="${d.id}" data-ex="${ex.id}">${ex.type==='cardio'?'Cardio':'Lift'}</div>
+          <div class="type-chip" data-action="toggle-type" data-day="${d.id}" data-ex="${ex.id}">Lift</div>
           <div class="rm" data-action="del-ex" data-day="${d.id}" data-ex="${ex.id}">✕</div>
         </div>`).join('')}
-      <button class="btn ghost sm" data-action="add-ex" data-day="${d.id}" style="margin:8px 14px;">+ Add exercise</button>
+      <div style="display:flex; gap:8px; margin:8px 14px;">
+        <button class="btn ghost sm" data-action="add-ex" data-day="${d.id}">+ Blank</button>
+        <button class="btn ghost sm" data-action="open-library" data-day="${d.id}">☰ Library</button>
+      </div>
     </div>`).join('');
 
   return `
@@ -611,24 +811,22 @@ function renderSession(){
   const s = DB.activeSession;
   if(!s){ VIEW.screen='train-pick'; return renderTrainPick(); }
 
-  const totalSets = s.exercises.reduce((a,e)=>a+e.sets.length,0);
-  const loggedSets = s.exercises.reduce((a,e)=>a+e.sets.filter(st=>st.logged).length,0);
-
   const exBlocks = s.exercises.map((ex, exi) => {
     const hasPrev = ex.prevSets && ex.prevSets.length;
     const copyBtn = hasPrev ? `<button class="copy-last" data-action="copy-last" data-ex="${exi}">↺ Use last time</button>` : '';
 
     if(ex.type === 'cardio'){
+      const targetText = [ex.targetDistance?ex.targetDistance+' km':'', ex.targetTime?'in '+ex.targetTime:''].filter(Boolean).join(' ');
       return `<div class="exercise-block">
-        <div class="ex-head"><div class="name">${esc(ex.name)}</div>${copyBtn}</div>
+        <div class="ex-head"><div><div class="name">${esc(ex.name)}</div>${targetText?`<div class="target">${targetText}</div>`:''}</div>${copyBtn}</div>
         ${ex.sets.map((st,si)=>{
           const dist = parseFloat(st.distance); const dur = parseDuration(st.duration);
           const pace = (dist && dur) ? formatPace(dur/dist) : null;
           const prev = ex.prevSets && ex.prevSets[si];
           return `<div class="set-row ${st.logged?'logged':''}">
             <div class="idx">${si+1}</div>
-            <input inputmode="decimal" placeholder="${prev?prev.distance+' km':'km'}" value="${st.distance??''}" data-action="cardio-field" data-ex="${exi}" data-set="${si}" data-field="distance">
-            <input placeholder="${prev?prev.duration:'mm:ss'}" value="${st.duration??''}" data-action="cardio-field" data-ex="${exi}" data-set="${si}" data-field="duration">
+            <input inputmode="decimal" placeholder="${prev?prev.distance+' km':(ex.targetDistance?ex.targetDistance+' km':'km')}" value="${st.distance??''}" data-action="cardio-field" data-ex="${exi}" data-set="${si}" data-field="distance">
+            <input placeholder="${prev?prev.duration:(ex.targetTime||'mm:ss')}" value="${st.duration??''}" data-action="cardio-field" data-ex="${exi}" data-set="${si}" data-field="duration">
             <div class="done-btn" data-action="toggle-set" data-ex="${exi}" data-set="${si}">✓</div>
           </div>${pace?`<div class="pace-note">${pace}</div>`:''}`;
         }).join('')}
@@ -661,13 +859,11 @@ function renderSession(){
     <h1 style="margin-bottom:0;">${esc(s.dayName)}</h1>
     <span class="elapsed" id="session-elapsed">0:00</span>
   </div>
-  <div class="sub">${loggedSets}/${totalSets} sets logged · rest <span data-action="edit-rest" style="color:var(--accent); text-decoration:underline;">${DB.settings.restSeconds}s</span></div>
+  <div class="sub">Rest default: <span data-action="edit-rest" style="color:var(--accent); text-decoration:underline;">${DB.settings.restSeconds}s</span></div>
   ${exBlocks}
-  <div class="session-actions">
-    <button class="btn ghost block" data-action="add-exercise-to-session" style="margin-bottom:10px;">+ Add exercise</button>
-    <button class="btn primary block" data-action="finish-session" style="margin-bottom:10px;">Finish & Save Session</button>
-    <button class="btn danger block" data-action="discard-session">Discard</button>
-  </div>
+  <button class="btn ghost block" data-action="add-exercise-to-session" style="margin-bottom:10px;">+ Add exercise</button>
+  <button class="btn primary block" data-action="finish-session" style="margin-bottom:10px;">Finish & Save Session</button>
+  <button class="btn danger block" data-action="discard-session">Discard</button>
   `;
 }
 
@@ -763,10 +959,12 @@ function renderRunSection(){
   </div>`;
 }
 function renderTrendSection(kind){
-  const isBody = kind==='body';
-  const arr = isBody ? DB.bodyweight : DB.sleep;
-  const unit = isBody ? 'kg' : 'hrs';
-  const title = isBody ? 'Body Weight' : 'Sleep';
+  const meta = {
+    body: { arr: DB.bodyweight, unit:'kg', title:'Body Weight', decimals:1 },
+    sleep: { arr: DB.sleep, unit:'hrs', title:'Sleep', decimals:1 },
+    steps: { arr: DB.steps, unit:' steps', title:'Steps', decimals:0 },
+  }[kind];
+  const { arr, unit, title, decimals } = meta;
   if(arr.length === 0){
     return `<div class="card"><h2>${title}</h2><div class="empty-inline">No entries yet — log from Home.</div></div>`;
   }
@@ -776,12 +974,12 @@ function renderTrendSection(kind){
   const delta = (cur!=null && prev!=null) ? cur-prev : null;
   const points = [...arr].sort((a,b)=>a.date.localeCompare(b.date)).slice(-30).map(e=>({date:e.date, value:e.value}));
   const histRows = [...arr].reverse().slice(0,6).map(e=>`
-    <div class="hist-row"><span class="d">${fmtDate(e.date)}</span><span>${e.value} ${unit}</span></div>`).join('');
+    <div class="hist-row"><span class="d">${fmtDate(e.date)}</span><span>${e.value.toLocaleString()}${unit}</span></div>`).join('');
   return `<div class="card">
     <div class="row" style="margin-bottom:10px;"><h2 style="margin:0;">${title}</h2>
       <div style="display:flex; gap:6px;">
-        ${cur?`<span class="pr-badge">7d avg ${cur.toFixed(1)}${unit}</span>`:''}
-        ${delta!=null?`<span class="pr-badge">${delta>=0?'+':''}${delta.toFixed(1)}${unit} vs prior wk</span>`:''}
+        ${cur!=null?`<span class="pr-badge">7d avg ${cur.toFixed(decimals)}${unit}</span>`:''}
+        ${delta!=null?`<span class="pr-badge">${delta>=0?'+':''}${delta.toFixed(decimals)}${unit} vs prior wk</span>`:''}
       </div>
     </div>
     ${genericChart(points)}
@@ -805,6 +1003,7 @@ function renderStats(){
     ${renderRunSection()}
     ${renderTrendSection('body')}
     ${renderTrendSection('sleep')}
+    ${renderTrendSection('steps')}
   `;
 }
 
@@ -859,30 +1058,20 @@ rtRing.style.strokeDasharray = RING_C;
 function startRestTimer(seconds){
   clearInterval(REST.timerId);
   REST.active = true; REST.remaining = seconds; REST.total = seconds;
-  updateTimerUI(); document.body.classList.add('rest-active'); syncTimerBar();
+  updateTimerUI(); timerBar.classList.add('show');
   REST.timerId = setInterval(()=>{ REST.remaining--; if(REST.remaining<=0){ finishRest(); return; } updateTimerUI(); }, 1000);
 }
-function finishRest(){ clearInterval(REST.timerId); REST.active=false; timerBar.classList.remove('show'); document.body.classList.remove('rest-active'); beep(); }
+function finishRest(){ clearInterval(REST.timerId); REST.active=false; timerBar.classList.remove('show'); beep(); }
 function updateTimerUI(){
   const m=Math.floor(Math.max(REST.remaining,0)/60), s=Math.max(REST.remaining,0)%60;
   rtTime.textContent = m+':'+String(s).padStart(2,'0');
   const frac = REST.total ? Math.max(REST.remaining,0)/REST.total : 0;
   rtRing.style.strokeDashoffset = RING_C*(1-frac);
 }
-function syncTimerBar(){ timerBar.classList.toggle('show', REST.active && !VIEW.modal && !VIEW.sheet); }
-document.getElementById('rt-plus').onclick = () => { REST.remaining += 15; REST.total += 15; updateTimerUI(); };
-document.getElementById('rt-skip').onclick = () => finishRest();
-
-/* ---- Shared audio context (avoid spawning a new one per beep) ---- */
-let audioCtx = null;
-function getAudioCtx(){
-  if(!audioCtx) audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-  if(audioCtx.state === 'suspended') audioCtx.resume();
-  return audioCtx;
-}
+function syncTimerBar(){ if(REST.active) timerBar.classList.add('show'); }
 function beep(){
   try{
-    const ctx = getAudioCtx();
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
     const o=ctx.createOscillator(), g=ctx.createGain();
     o.type='sine'; o.frequency.value=880; o.connect(g); g.connect(ctx.destination);
     g.gain.setValueAtTime(0.0001, ctx.currentTime);
@@ -893,7 +1082,7 @@ function beep(){
 }
 function playPR(){
   try{
-    const ctx = getAudioCtx();
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
     [523.25,659.25,783.99].forEach((freq,i)=>{
       const o=ctx.createOscillator(), g=ctx.createGain();
       o.type='sine'; o.frequency.value=freq; o.connect(g); g.connect(ctx.destination);
@@ -947,23 +1136,19 @@ function attachHandlers(){
       URL.revokeObjectURL(url);
     };
     if(a==='clear-data') el.onclick = () => {
-      VIEW.modal = { kind:'confirm', title:'Erase all data?', danger:true, confirmLabel:'Erase everything',
-        message:'All plans, sessions, and logs on this device will be permanently deleted. Export a backup first if you want to keep them.',
-        onConfirm:()=>{
-          localStorage.removeItem(STORE_KEY);
-          DB = load(); DB.settings.accent = DB.settings.accent || 'violet';
-          applyTheme(); VIEW={screen:'home'}; TAB='home';
-        }
-      };
-      render();
+      if(!confirm('Erase all plans, sessions, and logs? This cannot be undone.')) return;
+      if(!confirm('Really sure? Consider exporting a backup first.')) return;
+      localStorage.removeItem(STORE_KEY);
+      DB = load(); DB.settings.accent = DB.settings.accent || 'violet';
+      applyTheme(); VIEW={screen:'home'}; TAB='home'; render();
     };
 
     if(a==='open-sheet') el.onclick = () => { VIEW.sheet = el.dataset.kind; render(); };
-    if(a==='close-sheet') el.onclick = () => { VIEW.sheet = null; render(); };
+    if(a==='close-sheet') el.onclick = () => { VIEW.sheet = null; PENDING_SESSION = null; PENDING_DIFF = null; render(); };
     if(a==='save-sheet') el.onclick = () => {
       const inp = document.getElementById('sheet-input'); const v = parseFloat(inp.value);
       if(!v){ VIEW.sheet=null; render(); return; }
-      const arr = VIEW.sheet==='body' ? DB.bodyweight : DB.sleep;
+      const arr = VIEW.sheet==='body' ? DB.bodyweight : VIEW.sheet==='sleep' ? DB.sleep : DB.steps;
       const existing = arr.find(e=>e.date===todayISO());
       if(existing) existing.value = v; else arr.push({id:uid(), date:todayISO(), value:v});
       VIEW.sheet = null; save(); render();
@@ -973,15 +1158,11 @@ function attachHandlers(){
     };
     if(a==='resume-session') el.onclick = () => { TAB='train'; VIEW={screen:'train-session'}; render(); };
 
-    if(a==='new-plan') el.onclick = () => {
-      VIEW.modal = { kind:'prompt', title:'New Plan', placeholder:'Plan name', defaultValue:'New Plan', confirmLabel:'Create',
-        onConfirm:(val)=>{
-          const name = val.trim(); if(!name) return;
-          const p = { id:uid(), name, days:[] }; DB.plans.push(p); save();
-          VIEW = { screen:'plan-edit', planId:p.id };
-        }
-      };
-      render();
+    if(a==='new-plan') el.onclick = () => { VIEW.sheet = 'new-plan-template'; render(); };
+    if(a==='create-from-template') el.onclick = () => {
+      const plan = buildTemplatePlan(el.dataset.key);
+      DB.plans.push(plan); save();
+      VIEW = { screen:'plan-edit', planId: plan.id }; render();
     };
     if(a==='open-plan') el.onclick = () => { VIEW = { screen:'plan-edit', planId:el.dataset.id }; render(); };
     if(a==='dup-plan') el.onclick = () => {
@@ -994,10 +1175,9 @@ function attachHandlers(){
     if(a==='back-plans') el.onclick = () => { VIEW = { screen:'plans' }; render(); };
     if(a==='rename-plan') el.onblur = () => { const p=DB.plans.find(p=>p.id===VIEW.planId); p.name=el.value.trim()||p.name; save(); };
     if(a==='del-plan') el.onclick = () => {
-      VIEW.modal = { kind:'confirm', title:'Delete plan?', message:'This cannot be undone.', danger:true, confirmLabel:'Delete',
-        onConfirm:()=>{ DB.plans = DB.plans.filter(p=>p.id!==VIEW.planId); save(); VIEW = { screen:'plans' }; }
-      };
-      render();
+      if(!confirm('Delete this plan? This cannot be undone.')) return;
+      DB.plans = DB.plans.filter(p=>p.id!==VIEW.planId); save();
+      VIEW = { screen:'plans' }; render();
     };
     if(a==='add-day') el.onclick = () => {
       const p=DB.plans.find(p=>p.id===VIEW.planId); p.days.push({id:uid(),name:'New Day',exercises:[]}); save(); render();
@@ -1013,13 +1193,30 @@ function attachHandlers(){
       const p=DB.plans.find(p=>p.id===VIEW.planId); const d=p.days.find(d=>d.id===el.dataset.day);
       d.exercises.push({id:uid(), name:'', sets:3, reps:'', type:'strength'}); save(); render();
     };
+    if(a==='open-library') el.onclick = () => { VIEW.libraryDayId = el.dataset.day; VIEW.sheet = 'library'; render(); };
+    if(a==='add-from-library') el.onclick = () => {
+      const p = DB.plans.find(p=>p.id===VIEW.planId);
+      const d = p.days.find(d=>d.id===VIEW.libraryDayId);
+      const cat = el.dataset.cat; const name = el.dataset.name;
+      const item = (EXLIB[cat]||[]).find(it=>it.name===name);
+      if(!item || d.exercises.some(e=>e.name===name)) return;
+      if(item.type === 'cardio'){
+        d.exercises.push({ id:uid(), name:item.name, type:'cardio', targetDistance:item.targetDistance||'', targetTime:item.targetTime||'' });
+      } else {
+        d.exercises.push({ id:uid(), name:item.name, type:'strength', sets:item.sets, reps:item.reps });
+      }
+      save(); render();
+    };
     if(a==='del-ex') el.onclick = () => {
       const p=DB.plans.find(p=>p.id===VIEW.planId); const d=p.days.find(d=>d.id===el.dataset.day);
       d.exercises=d.exercises.filter(e=>e.id!==el.dataset.ex); save(); render();
     };
     if(a==='toggle-type') el.onclick = () => {
       const p=DB.plans.find(p=>p.id===VIEW.planId); const d=p.days.find(d=>d.id===el.dataset.day);
-      const ex=d.exercises.find(e=>e.id===el.dataset.ex); ex.type = ex.type==='cardio' ? 'strength' : 'cardio'; save(); render();
+      const ex=d.exercises.find(e=>e.id===el.dataset.ex);
+      if(ex.type==='cardio'){ ex.type='strength'; if(ex.sets==null) ex.sets=3; if(ex.reps==null) ex.reps=''; }
+      else { ex.type='cardio'; if(ex.targetDistance==null) ex.targetDistance=''; if(ex.targetTime==null) ex.targetTime=''; }
+      save(); render();
     };
     if(a==='ex-field') el.onblur = () => {
       const p=DB.plans.find(p=>p.id===VIEW.planId); const d=p.days.find(d=>d.id===el.dataset.day);
@@ -1028,17 +1225,16 @@ function attachHandlers(){
     };
 
     if(a==='edit-rest') el.onclick = () => {
-      VIEW.modal = { kind:'prompt', title:'Default Rest Time', message:'Seconds between sets.', inputType:'number', defaultValue:String(DB.settings.restSeconds), confirmLabel:'Save',
-        onConfirm:(val)=>{ const n=parseInt(val); if(n>0) DB.settings.restSeconds=n; save(); }
-      };
-      render();
+      const v = prompt('Default rest time (seconds):', DB.settings.restSeconds);
+      if(!v) return; DB.settings.restSeconds = parseInt(v)||90; save(); render();
     };
     if(a==='start-session') el.onclick = () => {
       const p=DB.plans.find(p=>p.id===el.dataset.plan); const d=p.days.find(d=>d.id===el.dataset.day);
       DB.activeSession = {
         id:uid(), date:todayISO(), startedAt:Date.now(), planName:p.name, dayName:d.name,
+        planId:p.id, dayId:d.id,
         exercises: d.exercises.map(ex => ex.type==='cardio' ? {
-          name:ex.name, type:'cardio', targetReps:ex.reps,
+          name:ex.name, type:'cardio', targetDistance:ex.targetDistance||'', targetTime:ex.targetTime||'',
           sets:[{distance:'', duration:'', logged:false}],
           prevSets: getPreviousSets(ex.name, 'cardio')
         } : {
@@ -1086,59 +1282,46 @@ function attachHandlers(){
       save(); render();
     };
     if(a==='add-exercise-to-session') el.onclick = () => {
-      VIEW.modal = { kind:'exercise', title:'Add Exercise', placeholder:'Exercise name', type:'strength', value:'', confirmLabel:'Add',
-        onConfirm:(name, type)=>{
-          if(!name) return;
-          DB.activeSession.exercises.push(type==='cardio'
-            ? {name, type:'cardio', targetReps:'', sets:[{distance:'',duration:'',logged:false}], prevSets:getPreviousSets(name,'cardio')}
-            : {name, type:'strength', targetSets:null, targetReps:'', sets:[{weight:'',reps:'',logged:false}], prevSets:getPreviousSets(name,'strength')});
-          save();
-        }
-      };
-      render();
+      const name = prompt('Exercise name:'); if(!name) return;
+      const cardio = confirm('Is this a cardio exercise? OK = Cardio, Cancel = Strength');
+      DB.activeSession.exercises.push(cardio
+        ? {name, type:'cardio', targetDistance:'', targetTime:'', sets:[{distance:'',duration:'',logged:false}], prevSets:getPreviousSets(name,'cardio')}
+        : {name, type:'strength', targetSets:null, targetReps:'', sets:[{weight:'',reps:'',logged:false}], prevSets:getPreviousSets(name,'strength')});
+      save(); render();
     };
     if(a==='finish-session') el.onclick = () => {
       const s = DB.activeSession;
-      s.exercises = s.exercises.map(ex => {
+      const cleaned = s.exercises.map(ex => {
         const {prevSets, ...rest} = ex;
         return {...rest, sets: ex.sets.filter(st =>
           ex.type==='cardio' ? (st.distance!=='' || st.duration!=='') : (st.weight!=='' || st.reps!=='')
         )};
       });
-      s.durationMin = Math.max(1, Math.round((Date.now()-s.startedAt)/60000));
-      DB.sessions.push(s); DB.activeSession = null; save();
-      finishRest(); clearInterval(elapsedInterval);
-      VIEW={screen:'home'}; TAB='home'; render();
+      const candidate = {...s, exercises: cleaned, durationMin: Math.max(1, Math.round((Date.now()-s.startedAt)/60000))};
+      const diff = detectPlanDiff(candidate);
+      if(diff){
+        PENDING_SESSION = candidate; PENDING_DIFF = diff;
+        VIEW.sheet = 'finish-diff'; render();
+      } else {
+        finalizeSession(candidate);
+      }
+    };
+    if(a==='finish-update-template') el.onclick = () => {
+      applyDiffToPlan(PENDING_DIFF);
+      finalizeSession(PENDING_SESSION);
+      PENDING_SESSION = null; PENDING_DIFF = null;
+    };
+    if(a==='finish-once') el.onclick = () => {
+      finalizeSession(PENDING_SESSION);
+      PENDING_SESSION = null; PENDING_DIFF = null;
     };
     if(a==='discard-session') el.onclick = () => {
-      VIEW.modal = { kind:'confirm', title:'Discard session?', message:'Nothing will be saved.', danger:true, confirmLabel:'Discard',
-        onConfirm:()=>{
-          DB.activeSession = null; save(); finishRest(); clearInterval(elapsedInterval);
-          VIEW={screen:'train-pick'};
-        }
-      };
-      render();
+      if(!confirm('Discard this session? Nothing will be saved.')) return;
+      DB.activeSession = null; save(); finishRest(); clearInterval(elapsedInterval);
+      VIEW={screen:'train-pick'}; render();
     };
 
     if(a==='select-progress-ex') el.onchange = () => { VIEW.progressEx = el.value; render(); };
-
-    if(a==='close-modal') el.onclick = () => { VIEW.modal = null; render(); };
-    if(a==='modal-set-type') el.onclick = () => {
-      const inp = document.getElementById('modal-input');
-      if(inp) VIEW.modal.value = inp.value;
-      VIEW.modal.type = el.dataset.value;
-      render();
-    };
-    if(a==='modal-confirm') el.onclick = () => {
-      const m = VIEW.modal; if(!m) return;
-      const inp = document.getElementById('modal-input');
-      const val = inp ? inp.value : '';
-      VIEW.modal = null;
-      if(m.kind==='exercise') m.onConfirm(val.trim(), m.type||'strength');
-      else if(m.kind==='prompt') m.onConfirm(val);
-      else m.onConfirm();
-      render();
-    };
   });
 
   const importInput = document.getElementById('import-file');
@@ -1150,18 +1333,13 @@ function attachHandlers(){
         try{
           const imported = JSON.parse(reader.result);
           if(!imported.plans || !imported.sessions) throw new Error('bad format');
-          VIEW.modal = { kind:'confirm', title:'Replace current data?', message:'This backup will overwrite everything currently stored on this device.', danger:true, confirmLabel:'Restore',
-            onConfirm:()=>{
-              DB = imported;
-              if(!DB.bodyweight) DB.bodyweight=[]; if(!DB.sleep) DB.sleep=[];
-              if(!DB.settings) DB.settings={restSeconds:90, accent:'violet'};
-              save(); applyTheme();
-            }
-          };
-        }catch(e){
-          VIEW.modal = { kind:'confirm', title:'Import failed', message:"That file doesn't look like a Ledger backup.", confirmLabel:'OK', hideCancel:true, onConfirm:()=>{} };
-        }
-        render();
+          if(!confirm('Replace current data with this backup? This cannot be undone.')) return;
+          DB = imported;
+          if(!DB.bodyweight) DB.bodyweight=[]; if(!DB.sleep) DB.sleep=[]; if(!DB.steps) DB.steps=[];
+          if(!DB.settings) DB.settings={restSeconds:90, accent:'violet'};
+          migrateCardioFields();
+          save(); applyTheme(); render();
+        }catch(e){ alert('Could not read that file — make sure it is a Ledger backup.'); }
       };
       reader.readAsText(file);
     };
